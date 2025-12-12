@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Control de Piso - Escáner</title>
+    
+    <link rel="icon" href="https://raw.githubusercontent.com/jesusvn1993mplvt3-ai/CIRINEO/refs/heads/main/icon.ico">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;700&family=Roboto+Condensed:wght@400;700&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: 'Roboto Condensed', sans-serif; background-color: #f1f5f9; overflow: hidden; }
+        h1, h2, .font-oswald { font-family: 'Oswald', sans-serif; }
+        
+        /* Animación de Radar para el estado de espera */
+        .radar-ping {
+            animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+        }
+        @keyframes ping {
+            75%, 100% { transform: scale(2); opacity: 0; }
+        }
+
+        /* Animación al escanear correctamente */
+        .scan-effect {
+            animation: flashSuccess 0.5s ease-out;
+        }
+        @keyframes flashSuccess {
+            0% { background-color: rgba(34, 197, 94, 0.2); transform: scale(1); }
+            50% { background-color: rgba(34, 197, 94, 0.1); transform: scale(1.02); }
+            100% { background-color: transparent; transform: scale(1); }
+        }
+
+        /* Loader */
+        .loader { border: 3px solid #f3f3f3; border-top: 3px solid #eab308; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Ocultar input real pero mantener foco */
+        .ghost-input {
+            opacity: 0; position: absolute; top: -1000px;
+        }
+    </style>
+</head>
+<body class="flex h-screen w-full text-slate-800">
+
+    <aside class="w-80 bg-slate-800 text-white flex flex-col border-r border-slate-700 shadow-2xl z-20">
+        <div class="p-6 border-b border-slate-700 bg-slate-900">
+            <h1 class="text-2xl font-bold flex items-center gap-3 text-yellow-400 tracking-wide">
+                <i data-lucide="scan-barcode" class="w-8 h-8"></i>
+                CONTROL PISO
+            </h1>
+            <p class="text-xs text-slate-400 mt-2 uppercase tracking-wider">Sistema de Asignación</p>
+        </div>
+
+        <div class="p-5 bg-slate-800 border-b border-slate-700">
+            <label class="text-xs text-slate-400 uppercase font-bold mb-2 block">Tejedor Responsable</label>
+            <div class="relative">
+                <i data-lucide="user" class="absolute left-3 top-3 w-5 h-5 text-slate-400"></i>
+                <input type="text" id="weaverInput" 
+                    class="w-full bg-slate-900 border border-slate-600 rounded-lg py-3 pl-10 pr-3 text-white focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 focus:outline-none transition-all font-bold text-lg"
+                    placeholder="Nombre..." autocomplete="off">
+            </div>
+        </div>
+
+        <div class="flex-grow overflow-hidden flex flex-col p-4">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase">Historial Reciente</span>
+                <span class="bg-slate-700 text-xs px-2 py-0.5 rounded-full text-slate-300" id="scanCount">0</span>
+            </div>
+            
+            <div class="overflow-y-auto space-y-2 pr-1" id="historyList">
+                <div class="text-center text-slate-600 text-sm mt-10 italic opacity-50">
+                    Sin registros en esta sesión
+                </div>
+            </div>
+        </div>
+
+        <div class="p-4 bg-slate-900 text-center border-t border-slate-700">
+            <div class="flex items-center justify-center gap-2 text-green-500 text-xs font-bold">
+                <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                SISTEMA EN LÍNEA
+            </div>
+        </div>
+    </aside>
+
+    <main class="flex-grow bg-slate-100 relative flex flex-col items-center justify-center p-10" id="mainArea">
+        
+        <input type="text" id="barcodeInput" class="ghost-input" autofocus autocomplete="off">
+
+        <div class="bg-white p-12 rounded-2xl shadow-xl text-center max-w-2xl w-full border border-slate-200 relative overflow-hidden group hover:shadow-2xl transition-all cursor-pointer" onclick="document.getElementById('barcodeInput').focus()">
+            
+            <div id="focusIndicator" class="absolute top-0 left-0 w-full h-1 bg-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.5)] transition-opacity duration-300"></div>
+            
+            <div class="mb-8 relative inline-block">
+                <div class="absolute inset-0 bg-blue-100 rounded-full radar-ping opacity-75"></div>
+                <div class="relative bg-blue-50 p-6 rounded-full border-2 border-blue-100 text-blue-600">
+                    <i data-lucide="qr-code" class="w-16 h-16"></i>
+                </div>
+            </div>
+
+            <h2 class="text-4xl font-bold text-slate-800 mb-2 font-oswald uppercase tracking-tight">Listo para Escanear</h2>
+            <p class="text-slate-500 text-lg mb-8">Utiliza el lector de código de barras o escribe el código.</p>
+
+            <div class="inline-flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-lg text-slate-600 text-sm font-mono border border-slate-200">
+                <i data-lucide="keyboard" class="w-4 h-4"></i>
+                <span>Esperando entrada...</span>
+            </div>
+            
+            <p id="errorMsg" class="text-red-500 font-bold mt-4 hidden animate-bounce">
+                ⚠️ POR FAVOR ASIGNA UN TEJEDOR PRIMERO
+            </p>
+        </div>
+
+        <p class="mt-8 text-slate-400 text-sm">Versión Escáner v2.0 - Compatible con Generador de Papeletas</p>
+    </main>
+
+    <div id="modalOverlay" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden flex items-center justify-center opacity-0 transition-opacity duration-200">
+        
+        <div class="bg-white w-full max-w-md rounded-xl shadow-2xl overflow-hidden transform scale-95 transition-transform duration-200" id="modalContent">
+            
+            <div class="bg-slate-800 p-6 text-center relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-yellow-400 to-blue-500"></div>
+                <h3 class="text-white text-xl font-bold uppercase tracking-wide flex justify-center items-center gap-2">
+                    <i data-lucide="package-check" class="text-yellow-400"></i>
+                    Confirmar Producción
+                </h3>
+            </div>
+
+            <div class="p-6 space-y-4">
+                
+                <div class="flex items-center gap-4 p-3 bg-slate-50 rounded-lg border border-slate-100">
+                    <div class="bg-slate-200 p-2 rounded-full text-slate-600">
+                        <i data-lucide="user" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <p class="text-xs text-slate-500 uppercase font-bold">Tejedor Asignado</p>
+                        <p class="text-lg font-bold text-slate-800 leading-tight" id="modalWeaver">---</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                    <div class="bg-blue-200 p-2 rounded-full text-blue-600">
+                        <i data-lucide="box" class="w-6 h-6"></i>
+                    </div>
+                    <div class="overflow-hidden">
+                        <p class="text-xs text-blue-500 uppercase font-bold">Código de Paquete</p>
+                        <p class="text-xl font-oswald font-bold text-blue-800 leading-tight break-all" id="modalCode">---</p>
+                    </div>
+                </div>
+
+                <div class="text-center text-xs text-slate-400 pt-2 border-t border-slate-100">
+                    Fecha de Registro: <span id="modalDate" class="font-mono text-slate-500">---</span>
+                </div>
+            </div>
+
+            <div class="p-4 bg-slate-50 border-t border-slate-200 flex gap-3">
+                <button onclick="closeModal()" id="btnCancel" class="flex-1 py-3 px-4 bg-white border border-slate-300 text-slate-600 rounded-lg font-bold hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition-colors uppercase text-sm">
+                    Cancelar
+                </button>
+                <button onclick="saveToFirebase()" id="btnConfirm" class="flex-[2] py-3 px-4 bg-slate-900 text-white rounded-lg font-bold hover:bg-slate-700 shadow-lg hover:shadow-xl transition-all uppercase text-sm flex items-center justify-center gap-2">
+                    <span>Confirmar</span>
+                    <i data-lucide="check-circle" class="w-4 h-4"></i>
+                </button>
+                <button id="btnLoading" class="hidden flex-[2] py-3 px-4 bg-slate-800 text-slate-400 rounded-lg font-bold uppercase text-sm flex items-center justify-center gap-2 cursor-wait" disabled>
+                    <div class="loader"></div> Procesando...
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 1. INICIALIZAR LUCIDE ICONS
+        lucide.createIcons();
+
+        // 2. CONFIGURACIÓN FIREBASE
+        const firebaseConfig = {
+            apiKey: "AIzaSyBqHgV4vDat1-VmZfKbiPg7nuiX-ROcexw",
+            authDomain: "cirineo-cec21.firebaseapp.com",
+            projectId: "cirineo-cec21",
+            storageBucket: "cirineo-cec21.firebasestorage.app",
+            messagingSenderId: "620210618284",
+            appId: "1:620210618284:web:482bab9bf74650fff18409",
+            measurementId: "G-B7YLM78RVW"
+        };
+        
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // 3. VARIABLES Y REFERENCIAS DOM
+        const barcodeInput = document.getElementById('barcodeInput');
+        const weaverInput = document.getElementById('weaverInput');
+        const mainArea = document.getElementById('mainArea');
+        const errorMsg = document.getElementById('errorMsg');
+        const focusIndicator = document.getElementById('focusIndicator');
+        
+        // Modal Refs
+        const modalOverlay = document.getElementById('modalOverlay');
+        const modalContent = document.getElementById('modalContent');
+        const btnConfirm = document.getElementById('btnConfirm');
+        const btnCancel = document.getElementById('btnCancel');
+        const btnLoading = document.getElementById('btnLoading');
+
+        // Historial Refs
+        const historyList = document.getElementById('historyList');
+        const scanCount = document.getElementById('scanCount');
+        let sessionScans = 0;
+        let currentScanCode = "";
+
+        // 4. GESTIÓN DEL FOCO (Siempre mantener foco en input)
+        document.addEventListener('click', (e) => {
+            // Si el modal NO está abierto y no estamos escribiendo el nombre del tejedor
+            if (modalOverlay.classList.contains('hidden') && e.target !== weaverInput) {
+                barcodeInput.focus();
+            }
+        });
+
+        barcodeInput.addEventListener('focus', () => {
+            focusIndicator.classList.remove('opacity-50');
+            focusIndicator.classList.add('opacity-100');
+        });
+
+        barcodeInput.addEventListener('blur', () => {
+            focusIndicator.classList.remove('opacity-100');
+            focusIndicator.classList.add('opacity-50');
+        });
+
+        // Cargar nombre del localStorage
+        window.onload = () => {
+            const savedName = localStorage.getItem('cirineo_tejedor');
+            if(savedName) weaverInput.value = savedName;
+            barcodeInput.focus();
+        };
+
+        weaverInput.addEventListener('change', () => {
+            localStorage.setItem('cirineo_tejedor', weaverInput.value);
+        });
+
+        // 5. LÓGICA DE ESCANEO
+        barcodeInput.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                const code = this.value.trim();
+                
+                // Validación básica
+                if (!code) return;
+
+                // Validar Tejedor
+                if (!weaverInput.value.trim()) {
+                    errorMsg.classList.remove('hidden');
+                    // Vibrar si es móvil
+                    if(navigator.vibrate) navigator.vibrate(200);
+                    this.value = "";
+                    return;
+                }
+                errorMsg.classList.add('hidden');
+
+                // ANIMACIÓN DE ESCANEO
+                mainArea.classList.add('scan-effect');
+                setTimeout(() => mainArea.classList.remove('scan-effect'), 500);
+
+                // Procesar
+                handleScan(code);
+                this.value = ""; // Limpiar input inmediatamente
+            }
+        });
+
+        function handleScan(code) {
+            currentScanCode = code;
+            
+            // Llenar datos del modal
+            document.getElementById('modalWeaver').textContent = weaverInput.value;
+            document.getElementById('modalCode').textContent = code;
+            document.getElementById('modalDate').textContent = new Date().toLocaleString('es-MX');
+
+            openModal();
+        }
+
+        // 6. CONTROL DEL MODAL
+        function openModal() {
+            modalOverlay.classList.remove('hidden');
+            // Timeout pequeño para permitir que se quite el display:none antes de la opacidad
+            setTimeout(() => {
+                modalOverlay.classList.remove('opacity-0');
+                modalContent.classList.remove('scale-95');
+                modalContent.classList.add('scale-100');
+            }, 10);
+            barcodeInput.blur(); // Quitar foco para evitar escaneos fantasma
+        }
+
+        function closeModal() {
+            modalOverlay.classList.add('opacity-0');
+            modalContent.classList.remove('scale-100');
+            modalContent.classList.add('scale-95');
+            
+            setTimeout(() => {
+                modalOverlay.classList.add('hidden');
+                resetModalButtons();
+                barcodeInput.focus(); // Regresar foco
+            }, 200);
+        }
+
+        function resetModalButtons() {
+            btnConfirm.classList.remove('hidden');
+            btnCancel.classList.remove('hidden');
+            btnLoading.classList.add('hidden');
+        }
+
+        // 7. GUARDAR EN FIREBASE
+        function saveToFirebase() {
+            // UI Loading
+            btnConfirm.classList.add('hidden');
+            btnCancel.classList.add('hidden');
+            btnLoading.classList.remove('hidden');
+
+            const record = {
+                codigo_paquete: currentScanCode,
+                tejedor: weaverInput.value,
+                fecha_scan: firebase.firestore.FieldValue.serverTimestamp(),
+                fecha_legible: new Date().toLocaleString('es-MX'),
+                tipo: 'produccion'
+            };
+
+            db.collection('registro_produccion').add(record)
+            .then(() => {
+                addToHistory(currentScanCode, weaverInput.value);
+                closeModal();
+                // Feedback de éxito extra (sonido o vibración opcional)
+                if(navigator.vibrate) navigator.vibrate([100, 50, 100]);
+            })
+            .catch((error) => {
+                console.error("Error:", error);
+                alert("Error al guardar: " + error.message);
+                closeModal();
+            });
+        }
+
+        // 8. GESTIÓN DEL HISTORIAL VISUAL
+        function addToHistory(code, weaver) {
+            sessionScans++;
+            scanCount.textContent = sessionScans;
+
+            // Limpiar mensaje de "vacio" si es el primero
+            if(sessionScans === 1) historyList.innerHTML = '';
+
+            const time = new Date().toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'});
+            
+            const item = document.createElement('div');
+            item.className = "bg-slate-700/50 p-3 rounded border-l-4 border-green-500 animate-[pulse_0.5s_ease-in-out]";
+            item.innerHTML = `
+                <div class="flex justify-between items-center mb-1">
+                    <span class="text-white font-bold text-sm truncate w-2/3" title="${code}">${code}</span>
+                    <span class="text-xs text-slate-400 font-mono">${time}</span>
+                </div>
+                <div class="flex items-center gap-1 text-xs text-slate-400">
+                    <i data-lucide="check-circle" class="w-3 h-3 text-green-500"></i>
+                    <span>Registrado</span>
+                </div>
+            `;
+
+            // Insertar al principio
+            historyList.insertBefore(item, historyList.firstChild);
+            
+            // Re-renderizar iconos nuevos
+            lucide.createIcons();
+        }
+
+    </script>
+</body>
+</html>
