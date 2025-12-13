@@ -167,6 +167,7 @@
             
             const currentPackageDisplay = order.displayPackageId || '1/1';
             const piecesInPackage = order.piecesInPackage || (order.packageSize === 'VARIO' ? 'VAR' : (order.packageSize || 50));
+            // Contenido del código de barras (ahora más corto)
             const barcodeValue = order.packageCode || `${order.partida}-${order.codigo}`;
 
             useEffect(() => {
@@ -446,37 +447,32 @@
         // --- APP PRINCIPAL ---
         const App = () => {
             const [orders, setOrders] = useState([]);
-            const [selectedOrder, setSelectedOrder] = useState(null); // Orden completa seleccionada en la lista
-            const [packageLabels, setPackageLabels] = useState([]); // Array de datos de papeletas (una por paquete)
+            const [selectedOrder, setSelectedOrder] = useState(null); 
+            const [packageLabels, setPackageLabels] = useState([]); 
             const [loading, setLoading] = useState(true);
             const [filterText, setFilterText] = useState('');
-            const [scanTrackerKey, setScanTrackerKey] = useState(0); // Clave para forzar re-renderizado
+            const [scanTrackerKey, setScanTrackerKey] = useState(0); 
 
             // Función para generar los datos de las papeletas por paquete
             const generatePackageLabels = (order) => {
                 const totalPieces = order.totalPedido || 0;
-                // Usar 50 como fallback si no se define packageSize o es 'VARIO'
                 const packageSizeValue = order.packageSize === 'VARIO' || !order.packageSize ? 50 : (Number(order.packageSize) || 50); 
-                
-                // Calcular N: número total de paquetes
                 const N = totalPieces > 0 ? Math.ceil(totalPieces / packageSizeValue) : 1; 
 
                 const labels = [];
                 for (let i = 1; i <= N; i++) {
-                    // Piezas en este paquete
                     const piecesInThisPackage = i < N ? packageSizeValue : (totalPieces % packageSizeValue || packageSizeValue);
                     
-                    // Formato del Barcode: ID_ORDEN-PARTIDA-CODIGO-PAQUETE_TOTAL|INDICE_ARRAY
-                    const arrayIndex = i - 1;
-                    const packageCode = `${order.id}-${order.partida}-${order.codigo}-${i}_${N}|${arrayIndex}`;
+                    // --- CAMBIO CLAVE AQUÍ ---
+                    // Nuevo Código de Barcode: ID_ORDEN-INDICE_PAQUETE-TOTAL_PAQUETES (Ej: 1765486167007-1-6)
+                    const packageCode = `${order.id}-${i}-${N}`;
 
                     labels.push({
                         ...order,
-                        // Propiedades específicas del paquete
                         packageIndex: i, 
                         totalPackages: N, 
                         piecesInPackage: piecesInThisPackage,
-                        packageCode: packageCode, // Este es el código único que ahora incluye el ID y el índice.
+                        packageCode: packageCode, // Código más corto y único
                         displayPackageId: `${i}/${N}`, 
                     });
                 }
