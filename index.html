@@ -25,6 +25,15 @@
         /* ESTILOS GENERALES DE LA APP */
         body { background-color: #f1f5f9; height: 100vh; overflow: hidden; font-family: 'Roboto Condensed', sans-serif; }
         
+        /* Ajuste para móviles: permite scroll si la pantalla es pequeña */
+        @media (max-width: 768px) {
+            body { height: auto; overflow: auto; }
+        }
+
+        /* Ocultar publicidad de la librería de escáner */
+        #reader a { display: none !important; }
+        #reader__dashboard_section_csr span { display: none !important; }
+
         /* ESTILOS DE LA ETIQUETA (VISUALIZACIÓN PANTALLA) */
         .label-wrapper {
             margin-bottom: 2rem;
@@ -33,7 +42,7 @@
             border-radius: 0.5rem;
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
             transition: box-shadow 0.2s;
-            page-break-inside: avoid; /* Evita que se parta a la mitad */
+            page-break-inside: avoid;
         }
         
         .label-preview-container {
@@ -72,7 +81,7 @@
         @media print {
             @page { 
                 size: 6in 4in; 
-                margin: 0mm; /* Márgenes cero para impresoras térmicas */
+                margin: 0mm; 
             }
             
             html, body {
@@ -85,7 +94,6 @@
 
             .no-print { display: none !important; }
 
-            /* El contenedor principal de impresión */
             .print-container {
                 display: block !important;
                 width: 100% !important;
@@ -97,7 +105,6 @@
                 position: static !important;
             }
 
-            /* Forzar salto de página exacto */
             .label-wrapper {
                 display: block !important;
                 width: 6in !important;
@@ -107,14 +114,11 @@
                 border: none !important;
                 box-shadow: none !important;
                 border-radius: 0 !important;
-                
-                /* La clave para 1 etiqueta por hoja */
                 break-after: page; 
                 page-break-after: always; 
                 page-break-inside: avoid;
             }
 
-            /* Eliminar salto después de la última para no sacar hoja blanca extra */
             .label-wrapper:last-child {
                 break-after: auto;
                 page-break-after: auto;
@@ -162,7 +166,7 @@
             return <div ref={containerRef} className="inline-block" style={{ width: size, height: size }}></div>;
         };
 
-        // --- COMPONENTE DE ETIQUETA (VISUAL) ---
+        // --- COMPONENTE DE ETIQUETA ---
         const ProductionLabel = ({ labelData }) => {
             const svgRef = useRef(null);
             
@@ -280,7 +284,7 @@
             );
         };
 
-        // --- COMPONENTE RASTREADOR DE ESCANEO (Con Lógica Unificada y Cámara) ---
+        // --- COMPONENTE RASTREADOR (CON CORRECCIONES DE LAYOUT) ---
         const ScanTracker = ({ allOrders, selectedOrder, setSelectedOrder, packageLabels, onScan }) => {
             const [scannedData, setScannedData] = useState([]);
             const [scanInput, setScanInput] = useState('');
@@ -294,7 +298,7 @@
             const orderCode = selectedOrder?.codigo;
             const tejedoraName = "Baitza"; 
 
-            // Obtener datos
+            // Cargar datos
             useEffect(() => {
                 if (!orderId) {
                     setScannedData([]);
@@ -306,39 +310,42 @@
                     .onSnapshot(snapshot => {
                         const data = snapshot.docs.map(doc => doc.data());
                         setScannedData(data);
-                        setScanStatus({ message: `Orden ${orderCode} cargada. Escaneando...`, type: 'info' });
+                        setScanStatus({ message: `Orden ${orderCode} cargada.`, type: 'info' });
                     }, error => {
                         console.error(error);
                     });
                 return () => unsubscribe();
             }, [orderId, orderCode]);
             
-            // Enfocar input al cargar (si no está la cámara)
+            // Focus
             useEffect(() => {
                 if (inputRef.current && !showCamera) {
                     inputRef.current.focus();
                 }
             }, [orderId, showCamera]);
 
-            // Lógica de Cámara
+            // CÁMARA: INICIO Y LIMPIEZA
             useEffect(() => {
                 if (showCamera) {
-                    // Pequeño timeout para asegurar que el DOM del modal se renderizó
+                    // Esperar renderizado del modal
                     setTimeout(() => {
                         const html5QrcodeScanner = new Html5QrcodeScanner(
                             "reader", 
-                            { fps: 10, qrbox: { width: 250, height: 150 } },
-                            /* verbose= */ false
+                            { 
+                                fps: 10, 
+                                qrbox: { width: 250, height: 150 }, // Caja de escaneo rectangular
+                                aspectRatio: 1.0 
+                            },
+                            false
                         );
                         
                         html5QrcodeScanner.render((decodedText) => {
-                            // Éxito al escanear
+                            // Éxito: Procesar y Cerrar
                             console.log(`Scan result: ${decodedText}`);
                             processScannedCode(decodedText);
-                            html5QrcodeScanner.clear();
-                            setShowCamera(false);
+                            setShowCamera(false); 
                         }, (errorMessage) => {
-                            // parse error, ignore loop
+                            // Error de lectura (normal mientras escanea)
                         });
                         
                         scannerRef.current = html5QrcodeScanner;
@@ -350,7 +357,6 @@
                     }
                 }
                 
-                // Cleanup
                 return () => {
                     if (scannerRef.current) {
                         scannerRef.current.clear().catch(err => console.error("Cleanup scanner", err));
@@ -359,7 +365,6 @@
             }, [showCamera]);
 
 
-            // Calcular piezas
             const calculatePiecesInPackage = (order, packageIndex) => {
                 const totalPieces = order.totalPedido || 0;
                 const packageSizeValue = order.packageSize === 'VARIO' || !order.packageSize ? 50 : (Number(order.packageSize) || 50); 
@@ -368,18 +373,15 @@
                 return totalPieces % packageSizeValue || packageSizeValue;
             };
 
-            // --- LÓGICA PRINCIPAL DE PROCESAMIENTO (Separada para usarse en Input y Cámara) ---
             const processScannedCode = async (rawCode) => {
                 if (!rawCode) return;
                 
                 rawCode = rawCode.trim().toUpperCase();
-                
-                // Normalización
                 let normalizedCode = rawCode.replace(/'/g, '-').replace(/\?/g, '_');
                 
                 const codeParts = normalizedCode.split('-');
                 if (codeParts.length !== 3) {
-                    setScanStatus({ message: `Error formato: ${rawCode} no es válido.`, type: 'error' });
+                    setScanStatus({ message: `Error formato: ${rawCode}`, type: 'error' });
                     return;
                 }
                 
@@ -402,7 +404,7 @@
                     orderToScan = foundOrder;
                 } 
                 else if (normalizedCode !== packageLabels.find(p => p.packageCode === normalizedCode)?.packageCode) {
-                    setScanStatus({ message: `Error: Código no pertenece a esta orden.`, type: 'error' });
+                    setScanStatus({ message: `Error: Código ajeno a orden actual.`, type: 'error' });
                     return;
                 }
 
@@ -417,7 +419,6 @@
                 
                 const piecesInThisPackage = calculatePiecesInPackage(orderToScan, packageIndex);
 
-                // Check duplicado
                 const globalScanCheck = await db.collection('registro_produccion')
                                                 .where('codigo_paquete', '==', normalizedCode)
                                                 .get();
@@ -427,7 +428,6 @@
                     return;
                 }
 
-                // Guardar
                 try {
                     const docRef = db.collection('registro_produccion').doc();
                     await docRef.set({
@@ -488,17 +488,21 @@
             };
 
             return (
-                <div className="w-96 bg-white border-l border-slate-200 flex flex-col no-print relative">
+                <div className="w-full md:w-96 bg-white border-l border-slate-200 flex flex-col no-print relative shrink-0">
                     
-                    {/* MODAL CÁMARA */}
+                    {/* MODAL CÁMARA FULLSCREEN (CORREGIDO: Fixed para que cubra toda la pantalla) */}
                     {showCamera && (
-                        <div className="absolute inset-0 bg-slate-900 z-50 flex flex-col p-2">
-                            <div className="flex justify-between items-center text-white mb-2">
-                                <span className="font-bold">Escaneando...</span>
-                                <button onClick={() => setShowCamera(false)} className="bg-red-600 px-3 py-1 rounded text-xs">CERRAR</button>
+                        <div className="fixed inset-0 bg-slate-900 z-[100] flex flex-col justify-center items-center p-4">
+                            <div className="w-full max-w-md bg-white rounded-lg shadow-2xl overflow-hidden">
+                                <div className="flex justify-between items-center p-3 bg-slate-100 border-b">
+                                    <span className="font-bold text-slate-700">Escaneando...</span>
+                                    <button onClick={() => setShowCamera(false)} className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-xs font-bold transition">CERRAR</button>
+                                </div>
+                                <div id="reader" className="w-full bg-black"></div>
+                                <div className="p-3 text-center text-slate-500 text-sm">
+                                    Apunta la cámara al código de barras.
+                                </div>
                             </div>
-                            <div id="reader" className="bg-white w-full h-64"></div>
-                            <p className="text-white text-xs text-center mt-2">Apunta al código de barras</p>
                         </div>
                     )}
 
@@ -521,14 +525,13 @@
                                 onChange={e => setScanInput(e.target.value)}
                                 placeholder={selectedOrder ? `Escanear...` : 'Modo Rápido'}
                                 className="w-full border-2 border-slate-300 rounded p-2 text-sm focus:border-blue-500 focus:outline-none font-mono"
-                                autoFocus
                             />
                         </form>
                         <div className={`mt-2 p-1.5 rounded text-xs text-center ${statusClasses[scanStatus.type]}`}>{scanStatus.message}</div>
                     </div>
 
                     {selectedOrder ? (
-                        <div className="flex-grow overflow-y-auto p-3 space-y-4">
+                        <div className="flex-grow overflow-y-auto p-3 space-y-4 max-h-96 md:max-h-full">
                             <div className="bg-red-50 p-3 rounded">
                                 <h4 className="font-bold text-red-800 flex items-center gap-1 mb-2"><Icon name="clock" size={14}/> PENDIENTES ({pendingPackages.length})</h4>
                                 <div className="grid grid-cols-4 gap-2">
@@ -550,7 +553,7 @@
                             </div>
                         </div>
                     ) : (
-                        <div className="flex-grow flex items-center justify-center p-6 text-center text-slate-500">
+                        <div className="flex-grow flex items-center justify-center p-6 text-center text-slate-500 min-h-[200px]">
                             <p className="p-4 border border-dashed border-slate-300 rounded text-sm bg-slate-50">
                                 Usa la pistola o la cámara para cargar una orden.
                             </p>
@@ -649,10 +652,11 @@
             };
 
             return (
-                <div className="flex h-screen w-full">
+                // AJUSTE CLAVE: flex-col en móvil, flex-row en escritorio (md)
+                <div className="flex flex-col md:flex-row h-screen w-full">
                     
                     {/* COLUMNA 1: BARRA LATERAL */}
-                    <div className="w-96 bg-slate-800 text-white flex flex-col border-r border-slate-700 shadow-xl no-print z-10">
+                    <div className="w-full md:w-96 bg-slate-800 text-white flex flex-col border-r border-slate-700 shadow-xl no-print z-10 shrink-0 h-64 md:h-auto">
                         <div className="p-4 border-b border-slate-700 bg-slate-900">
                             <h1 className="text-xl font-bold flex items-center gap-2 text-yellow-400">
                                 <Icon name="printer" /> GENERADOR
@@ -689,37 +693,36 @@
                                 </div>
                             ))}
                         </div>
-                        <div className="p-4 text-xs text-center text-slate-500 border-t border-slate-700 bg-slate-900">v2.5 + Cámara</div>
                     </div>
 
                     {/* COLUMNA 2: ÁREA PRINCIPAL */}
-                    <div className="flex-grow flex-shrink min-w-0 bg-slate-100 flex flex-col relative overflow-auto">
+                    <div className="flex-grow flex-shrink min-w-0 bg-slate-100 flex flex-col relative overflow-auto h-96 md:h-auto">
                         <div className="bg-white p-4 shadow-sm border-b flex justify-between items-center no-print sticky top-0 z-10">
                             <div>
                                 {selectedOrder ? (
-                                    <h2 className="font-bold text-slate-700 flex items-center gap-2">
+                                    <h2 className="font-bold text-slate-700 flex items-center gap-2 text-sm md:text-base">
                                         {selectedOrder.codigo}
-                                        <span className="text-sm font-medium text-blue-600 bg-blue-100 px-2 py-1 rounded-full">{packageLabels.length} Papeletas</span>
+                                        <span className="text-xs md:text-sm font-medium text-blue-600 bg-blue-100 px-2 py-1 rounded-full whitespace-nowrap">{packageLabels.length} Etq</span>
                                     </h2>
                                 ) : (
                                     <h2 className="font-bold text-slate-400">Seleccione orden</h2>
                                 )}
                             </div>
-                            <div className="flex gap-3">
+                            <div className="flex gap-2">
                                 {selectedOrder && (
                                     <>
-                                        <button onClick={handleArchive} className="px-4 py-2 bg-white border border-slate-300 text-slate-600 rounded font-bold hover:bg-red-50 hover:text-red-600 text-sm">
+                                        <button onClick={handleArchive} className="px-3 py-2 bg-white border border-slate-300 text-slate-600 rounded font-bold hover:bg-red-50 hover:text-red-600 text-xs md:text-sm">
                                             ARCHIVAR
                                         </button>
-                                        <button onClick={handlePrint} className="px-6 py-2 bg-slate-900 text-white rounded font-bold hover:bg-slate-700 shadow-lg transition flex items-center gap-2">
-                                            <Icon name="printer" size={18}/> IMPRIMIR
+                                        <button onClick={handlePrint} className="px-3 py-2 bg-slate-900 text-white rounded font-bold hover:bg-slate-700 shadow-lg transition flex items-center gap-2 text-xs md:text-sm">
+                                            <Icon name="printer" size={16}/> IMPRIMIR
                                         </button>
                                     </>
                                 )}
                             </div>
                         </div>
 
-                        <div className="flex-grow flex flex-col items-center p-10 bg-slate-200 overflow-y-auto print-container">
+                        <div className="flex-grow flex flex-col items-center p-4 md:p-10 bg-slate-200 overflow-y-auto print-container">
                             {packageLabels.length > 0 ? (
                                 packageLabels.map((labelData, index) => (
                                     <div key={index} className="label-wrapper">
@@ -727,7 +730,7 @@
                                     </div>
                                 ))
                             ) : (
-                                <div className="text-center text-slate-400 flex flex-col items-center mt-20">
+                                <div className="text-center text-slate-400 flex flex-col items-center mt-10 md:mt-20">
                                     <Icon name="arrow-left-circle" size={48} className="mb-4 opacity-50"/>
                                     <p className="text-lg font-bold">Selecciona una orden</p>
                                 </div>
@@ -735,7 +738,7 @@
                         </div>
                     </div>
 
-                    {/* COLUMNA 3: TRACKER */}
+                    {/* COLUMNA 3: TRACKER (Móvil: Abajo / Desktop: Derecha) */}
                     <ScanTracker 
                         key={scanTrackerKey} 
                         allOrders={orders} 
