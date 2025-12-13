@@ -2,199 +2,102 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Control de Piso - Escáner</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Producción - Cirineo</title>
     
     <link rel="icon" href="https://raw.githubusercontent.com/jesusvn1993mplvt3-ai/CIRINEO/refs/heads/main/icon.ico">
-
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
     
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.0/dist/JsBarcode.all.min.js"></script>
+
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
     <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;700&family=Roboto+Condensed:wght@400;700&display=swap" rel="stylesheet">
 
     <style>
-        body { font-family: 'Roboto Condensed', sans-serif; background-color: #f1f5f9; overflow: hidden; }
-        h1, h2, .font-oswald { font-family: 'Oswald', sans-serif; }
+        /* ESTILOS GENERALES DE LA APP */
+        body { background-color: #f1f5f9; height: 100vh; overflow: hidden; font-family: 'Roboto Condensed', sans-serif; }
         
-        /* Animación de Radar para el estado de espera */
-        .radar-ping {
-            animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
-        }
-        @keyframes ping {
-            75%, 100% { transform: scale(2); opacity: 0; }
-        }
-
-        /* Animación al escanear correctamente */
-        .scan-effect {
-            animation: flashSuccess 0.5s ease-out;
-        }
-        @keyframes flashSuccess {
-            0% { background-color: rgba(34, 197, 94, 0.2); transform: scale(1); }
-            50% { background-color: rgba(34, 197, 94, 0.1); transform: scale(1.02); }
-            100% { background-color: transparent; transform: scale(1); }
+        /* ESTILOS DE LA ETIQUETA (LABEL) */
+        .label-preview-container {
+            width: 6in;
+            height: 4in;
+            background-color: white;
+            position: relative;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 5px 15px -2px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s;
         }
 
-        /* Loader */
-        .loader { border: 3px solid #f3f3f3; border-top: 3px solid #eab308; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; }
+        /* Estilos internos de la etiqueta */
+        .lbl-row { display: flex; border-bottom: 2px solid #000; width: 100%; }
+        .lbl-row:last-child { border-bottom: none; }
+        .lbl-col { border-right: 2px solid #000; padding: 4px 8px; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
+        .lbl-col:last-child { border-right: none; }
+        .lbl-title { font-size: 14px; font-weight: 700; color: #333; text-transform: uppercase; line-height: 1; margin-bottom: 2px; }
+        .lbl-big { font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 42px; line-height: 0.9; color: #000; white-space: nowrap; }
+        .lbl-medium { font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 26px; line-height: 1; color: #000; white-space: nowrap; }
+        .lbl-small { font-size: 16px; font-weight: 700; color: #000; }
+        
+        /* Ajustes específicos para filas de la etiqueta */
+        .row-header { height: 18%; }
+        .row-info { height: 12%; }
+        .row-desc { height: 10%; align-items: center; }
+        .row-metrics { height: 22%; }
+        .row-details { height: 23%; }
+        .row-footer { height: 15%; }
+
+        /* ESTILOS DE IMPRESIÓN */
+        @media print {
+            @page { size: 6in 4in; margin: 0; }
+            body { background: white; -webkit-print-color-adjust: exact; }
+            .no-print { display: none !important; }
+
+            .print-container {
+                display: block;
+                overflow: visible !important;
+                width: auto;
+                height: auto;
+                padding: 0;
+                margin: 0;
+            }
+
+            .label-wrapper {
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 6in;
+                height: 4in;
+                page-break-after: always;
+                box-shadow: none !important;
+            }
+
+            .label-wrapper:last-child {
+                page-break-after: avoid;
+            }
+
+            .label-preview-container { border: none; transform: none !important; box-shadow: none; margin: 0; }
+        }
+
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
-        /* Ocultar input real pero mantener foco */
-        .ghost-input {
-            opacity: 0; position: absolute; top: -1000px;
-        }
     </style>
 </head>
-<body class="flex h-screen w-full text-slate-800">
+<body>
+    <div id="root"></div>
 
-    <aside class="w-80 bg-slate-800 text-white flex flex-col border-r border-slate-700 shadow-2xl z-20">
-        <div class="p-6 border-b border-slate-700 bg-slate-900">
-            <h1 class="text-2xl font-bold flex items-center gap-3 text-yellow-400 tracking-wide">
-                <i data-lucide="scan-barcode" class="w-8 h-8"></i>
-                CONTROL PISO
-            </h1>
-            <p class="text-xs text-slate-400 mt-2 uppercase tracking-wider">Sistema de Asignación</p>
-        </div>
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo, useCallback } = React;
 
-        <div class="p-5 bg-slate-800 border-b border-slate-700">
-            <label class="text-xs text-slate-400 uppercase font-bold mb-2 block">Tejedor Responsable</label>
-            <div class="relative">
-                <i data-lucide="user" class="absolute left-3 top-3 w-5 h-5 text-slate-400"></i>
-                <input type="text" id="weaverInput" 
-                    class="w-full bg-slate-900 border border-slate-600 rounded-lg py-3 pl-10 pr-3 text-white focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 focus:outline-none transition-all font-bold text-lg"
-                    placeholder="Nombre..." autocomplete="off">
-            </div>
-        </div>
-
-        <div class="flex-grow overflow-hidden flex flex-col p-4">
-            <div class="flex items-center justify-between mb-3">
-                <span class="text-xs font-bold text-slate-400 uppercase">Historial Reciente</span>
-                <span class="bg-slate-700 text-xs px-2 py-0.5 rounded-full text-slate-300" id="scanCount">0</span>
-            </div>
-            
-            <div class="overflow-y-auto space-y-2 pr-1" id="historyList">
-                <div class="text-center text-slate-600 text-sm mt-10 italic opacity-50">
-                    Sin registros en esta sesión
-                </div>
-            </div>
-        </div>
-
-        <div class="p-4 bg-slate-900 text-center border-t border-slate-700">
-            <div class="flex items-center justify-center gap-2 text-green-500 text-xs font-bold">
-                <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                SISTEMA EN LÍNEA
-            </div>
-        </div>
-    </aside>
-
-    <main class="flex-grow bg-slate-100 relative flex flex-col items-center justify-center p-10" id="mainArea">
-        
-        <input type="text" id="barcodeInput" class="ghost-input" autofocus autocomplete="off">
-
-        <div class="bg-white p-12 rounded-2xl shadow-xl text-center max-w-2xl w-full border border-slate-200 relative overflow-hidden group hover:shadow-2xl transition-all cursor-pointer" onclick="document.getElementById('barcodeInput').focus()">
-            
-            <div id="focusIndicator" class="absolute top-0 left-0 w-full h-1 bg-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.5)] transition-opacity duration-300"></div>
-            
-            <div class="mb-8 relative inline-block">
-                <div class="absolute inset-0 bg-blue-100 rounded-full radar-ping opacity-75"></div>
-                <div class="relative bg-blue-50 p-6 rounded-full border-2 border-blue-100 text-blue-600">
-                    <i data-lucide="qr-code" class="w-16 h-16"></i>
-                </div>
-            </div>
-
-            <h2 class="text-4xl font-bold text-slate-800 mb-2 font-oswald uppercase tracking-tight">Listo para Escanear</h2>
-            <p class="text-slate-500 text-lg mb-8">Utiliza el lector de código de barras o escribe el código.</p>
-
-            <div class="inline-flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-lg text-slate-600 text-sm font-mono border border-slate-200">
-                <i data-lucide="keyboard" class="w-4 h-4"></i>
-                <span>Esperando entrada...</span>
-            </div>
-            
-            <p id="errorMsg" class="text-red-500 font-bold mt-4 hidden animate-bounce">
-                ⚠️ POR FAVOR ASIGNA UN TEJEDOR PRIMERO
-            </p>
-        </div>
-
-        <p class="mt-8 text-slate-400 text-sm">Versión Escáner v2.1 - Compatible con Generador de Papeletas</p>
-    </main>
-
-    <div id="modalOverlay" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden flex items-center justify-center opacity-0 transition-opacity duration-200">
-        
-        <div class="bg-white w-full max-w-md rounded-xl shadow-2xl overflow-hidden transform scale-95 transition-transform duration-200" id="modalContent">
-            
-            <div class="bg-slate-800 p-6 text-center relative overflow-hidden">
-                <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-yellow-400 to-blue-500"></div>
-                <h3 class="text-white text-xl font-bold uppercase tracking-wide flex justify-center items-center gap-2">
-                    <i data-lucide="package-check" class="text-yellow-400"></i>
-                    Confirmar Producción
-                </h3>
-            </div>
-
-            <div class="p-6 space-y-4">
-                
-                <div class="flex items-center gap-4 p-3 bg-slate-50 rounded-lg border border-slate-100">
-                    <div class="bg-slate-200 p-2 rounded-full text-slate-600">
-                        <i data-lucide="user" class="w-6 h-6"></i>
-                    </div>
-                    <div>
-                        <p class="text-xs text-slate-500 uppercase font-bold">Tejedor Asignado</p>
-                        <p class="text-lg font-bold text-slate-800 leading-tight" id="modalWeaver">---</p>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-2 gap-3 text-sm">
-                    <div class="bg-slate-50 p-3 rounded-lg border border-slate-100">
-                        <p class="text-xs text-slate-500 uppercase font-bold">Modelo</p>
-                        <p class="text-xl font-oswald font-bold text-slate-800" id="modalModel">---</p>
-                    </div>
-                    <div class="bg-slate-50 p-3 rounded-lg border border-slate-100">
-                        <p class="text-xs text-slate-500 uppercase font-bold">Paquete</p>
-                        <p class="text-xl font-oswald font-bold text-slate-800" id="modalPackageDisplay">---</p>
-                    </div>
-                </div>
-
-                <div class="bg-slate-50 p-3 rounded-lg border border-slate-100">
-                    <p class="text-xs text-slate-500 uppercase font-bold">Cliente / Partida</p>
-                    <p class="text-lg font-bold text-slate-800" id="modalClientPartida">---</p>
-                </div>
-                
-                <div class="flex items-center gap-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
-                    <div class="bg-blue-200 p-2 rounded-full text-blue-600">
-                        <i data-lucide="box" class="w-6 h-6"></i>
-                    </div>
-                    <div class="overflow-hidden">
-                        <p class="text-xs text-blue-500 uppercase font-bold">Código Escaneado</p>
-                        <p class="text-sm font-mono font-bold text-blue-800 leading-tight break-all" id="modalBarcodeValue">---</p>
-                    </div>
-                </div>
-
-                <div class="text-center text-xs text-slate-400 pt-2 border-t border-slate-100">
-                    Fecha de Registro: <span id="modalDate" class="font-mono text-slate-500">---</span>
-                </div>
-            </div>
-
-            <div class="p-4 bg-slate-50 border-t border-slate-200 flex gap-3">
-                <button onclick="closeModal()" id="btnCancel" class="flex-1 py-3 px-4 bg-white border border-slate-300 text-slate-600 rounded-lg font-bold hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition-colors uppercase text-sm">
-                    Cancelar
-                </button>
-                <button onclick="saveToFirebase()" id="btnConfirm" class="flex-[2] py-3 px-4 bg-slate-900 text-white rounded-lg font-bold hover:bg-slate-700 shadow-lg hover:shadow-xl transition-all uppercase text-sm flex items-center justify-center gap-2">
-                    <span>Confirmar</span>
-                    <i data-lucide="check-circle" class="w-4 h-4"></i>
-                </button>
-                <button id="btnLoading" class="hidden flex-[2] py-3 px-4 bg-slate-800 text-slate-400 rounded-lg font-bold uppercase text-sm flex items-center justify-center gap-2 cursor-wait" disabled>
-                    <div class="loader"></div> Procesando...
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // 1. INICIALIZAR LUCIDE ICONS
-        lucide.createIcons();
-
-        // 2. CONFIGURACIÓN FIREBASE
+        // --- CONFIGURACIÓN DE FIREBASE ---
         const firebaseConfig = {
             apiKey: "AIzaSyBqHgV4vDat1-VmZfKbiPg7nuiX-ROcexw",
             authDomain: "cirineo-cec21.firebaseapp.com",
@@ -205,283 +108,531 @@
             measurementId: "G-B7YLM78RVW"
         };
         
-        firebase.initializeApp(firebaseConfig);
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
+        const FieldValue = firebase.firestore.FieldValue; // Para el timestamp del servidor
 
-        // 3. VARIABLES Y REFERENCIAS DOM
-        const barcodeInput = document.getElementById('barcodeInput');
-        const weaverInput = document.getElementById('weaverInput');
-        const mainArea = document.getElementById('mainArea');
-        const errorMsg = document.getElementById('errorMsg');
-        const focusIndicator = document.getElementById('focusIndicator');
-        
-        // Modal Refs
-        const modalOverlay = document.getElementById('modalOverlay');
-        const modalContent = document.getElementById('modalContent');
-        const btnConfirm = document.getElementById('btnConfirm');
-        const btnCancel = document.getElementById('btnCancel');
-        const btnLoading = document.getElementById('btnLoading');
-
-        // Historial Refs
-        const historyList = document.getElementById('historyList');
-        const scanCount = document.getElementById('scanCount');
-        let sessionScans = 0;
-        
-        // **NUEVA** Variable global para la información de la orden combinada
-        let currentOrderData = null;
-
-        // **NUEVAS** Referencias a elementos del modal
-        const modalModel = document.getElementById('modalModel');
-        const modalPackageDisplay = document.getElementById('modalPackageDisplay');
-        const modalBarcodeValue = document.getElementById('modalBarcodeValue');
-        const modalClientPartida = document.getElementById('modalClientPartida');
-        const modalWeaver = document.getElementById('modalWeaver');
-
-
-        // 4. GESTIÓN DEL FOCO (Siempre mantener foco en input)
-        document.addEventListener('click', (e) => {
-            if (modalOverlay.classList.contains('hidden') && e.target !== weaverInput) {
-                barcodeInput.focus();
-            }
-        });
-
-        barcodeInput.addEventListener('focus', () => {
-            focusIndicator.classList.remove('opacity-50');
-            focusIndicator.classList.add('opacity-100');
-        });
-
-        barcodeInput.addEventListener('blur', () => {
-            focusIndicator.classList.remove('opacity-100');
-            focusIndicator.classList.add('opacity-50');
-        });
-
-        // Cargar nombre del localStorage
-        window.onload = () => {
-            const savedName = localStorage.getItem('cirineo_tejedor');
-            if(savedName) weaverInput.value = savedName;
-            barcodeInput.focus();
+        // --- COMPONENTE ICONO ---
+        const Icon = ({ name, size = 18, className }) => {
+            const containerRef = useRef(null);
+            useEffect(() => {
+                if (containerRef.current && lucide.icons[name]) {
+                    containerRef.current.innerHTML = ''; 
+                    const svgString = lucide.icons[name].toSvg({ width: size, height: size, class: className });
+                    containerRef.current.innerHTML = svgString;
+                }
+            }, [name, size, className]);
+            return <div ref={containerRef} className="inline-block" style={{ width: size, height: size }}></div>;
         };
 
-        weaverInput.addEventListener('change', () => {
-            localStorage.setItem('cirineo_tejedor', weaverInput.value);
-        });
-
-        // **NUEVA** Función para parsear el código de barras complejo
-        function parseBarcode(code) {
-            // Formato: ID_ORDEN-PARTIDA-CODIGO-PAQUETE_TOTAL|INDICE_ARRAY
-            const parts = code.split('-'); 
-            if (parts.length < 4) return null;
-
-            const packageData = parts[3].split('|'); // ['1_5', '0']
-            const packageCounts = packageData[0].split('_'); // ['1', '5']
-
-            return {
-                orderId: parts[0],
-                partida: parts[1],
-                codigo: parts[2],
-                paqueteActual: packageCounts[0],
-                paquetesTotales: packageCounts[1],
-                displayPackageId: `${packageCounts[0]}/${packageCounts[1]}`,
-                fullCode: code
-            };
-        }
-
-        // **NUEVA** Función para actualizar el modal con datos de la orden
-        function updateModalWithOrderData(order, barcodeDetails) {
-            modalModel.textContent = order.codigo || 'S/N';
-            modalPackageDisplay.textContent = barcodeDetails.displayPackageId;
-            modalBarcodeValue.textContent = barcodeDetails.fullCode;
-            modalClientPartida.textContent = `${order.cliente || 'N/A'} / ${order.partida || 'N/A'}`;
-            document.getElementById('modalDate').textContent = new Date().toLocaleString('es-MX');
-            modalWeaver.textContent = weaverInput.value;
+        // --- COMPONENTE DE ETIQUETA (VISUAL) ---
+        const ProductionLabel = ({ labelData }) => {
+            const svgRef = useRef(null);
             
-            // Re-renderizar iconos nuevos (si se insertan dinámicamente)
-            lucide.createIcons();
-        }
+            const order = labelData; 
+            const subPiece = order.subPiecesData && order.subPiecesData.length > 0 ? order.subPiecesData[0] : {};
+            
+            const materialNylon = order.threading ? order.threading.find(t => t.material && t.material.toUpperCase().includes('NYLON')) : null;
+            const materialLycra = order.threading ? order.threading.find(t => t.material && t.material.toUpperCase().includes('LYCRA')) : null;
+            const lycraText = materialLycra ? materialLycra.material.replace(/LYCRA/i, '').trim() : (order.threading && order.threading[1] ? order.threading[1].material : 'N/A');
+            const nylonText = materialNylon ? materialNylon.material.replace(/NYLON/i, '').trim() : (order.threading && order.threading[0] ? order.threading[0].material : 'N/A');
+            
+            const currentPackageDisplay = order.displayPackageId || '1/1';
+            const piecesInPackage = order.piecesInPackage || (order.packageSize === 'VARIO' ? 'VAR' : (order.packageSize || 50));
+            // Usamos el packageCode generado en App.js para el valor del código de barras.
+            const barcodeValue = order.packageCode || `${order.partida}-${order.codigo}`;
 
-        // 5. LÓGICA DE ESCANEO (MODIFICADA)
-        barcodeInput.addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') {
-                const code = this.value.trim();
-                
-                if (!code) return;
+            useEffect(() => {
+                if (svgRef.current && barcodeValue) {
+                    try {
+                        JsBarcode(svgRef.current, barcodeValue, {
+                            format: "CODE128",
+                            lineColor: "#000",
+                            width: 2, // Ancho de las líneas, valor alto para legibilidad
+                            height: 40,
+                            displayValue: false,
+                            margin: 0
+                        });
+                    } catch (e) { console.error("Error barcode", e); }
+                }
+            }, [barcodeValue]);
 
-                // 1. Validar Tejedor
-                if (!weaverInput.value.trim()) {
-                    errorMsg.classList.remove('hidden');
-                    if(navigator.vibrate) navigator.vibrate(200);
-                    this.value = "";
+            const fechaEntrega = order.fechaEntrega || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('es-MX');
+
+            return (
+                <div className="label-preview-container">
+                    {/* FILA 1: MODELO | TOTAL */}
+                    <div className="lbl-row row-header">
+                        <div className="lbl-col" style={{width: '60%'}}>
+                            <div className="lbl-title">MODELO</div>
+                            <div className="lbl-big">{order.codigo || 'S/N'}</div>
+                        </div>
+                        <div className="lbl-col" style={{width: '40%'}}>
+                            <div className="lbl-title">TOTAL PIEZAS ORDEN</div>
+                            <div className="lbl-big">{order.totalPedido || 0}</div>
+                        </div>
+                    </div>
+
+                    {/* FILA 2: PARTIDA | CLIENTE */}
+                    <div className="lbl-row row-info">
+                        <div className="lbl-col" style={{width: '50%'}}>
+                            <div className="lbl-title">PARTIDA</div>
+                            <div className="lbl-medium">{order.partida || '---'}</div>
+                        </div>
+                        <div className="lbl-col" style={{width: '50%'}}>
+                            <div className="lbl-title">CLIENTE</div>
+                            <div className="lbl-medium" style={{fontSize: order.cliente?.length > 10 ? '22px' : '26px'}}>{order.cliente || '---'}</div>
+                        </div>
+                    </div>
+
+                    {/* FILA 3: DESCRIPCION */}
+                    <div className="lbl-row row-desc">
+                        <div className="lbl-col" style={{flexDirection: 'row', alignItems: 'baseline', gap: '10px', width: '100%'}}>
+                            <span className="lbl-title">DESCRIPCION:</span>
+                            <span style={{fontSize: '16px', fontWeight: 'bold'}}>{subPiece.pieza || 'ESTANDAR'}</span>
+                        </div>
+                    </div>
+
+                    {/* FILA 4: METRICAS CENTRALES */}
+                    <div className="lbl-row row-metrics">
+                        <div className="lbl-col" style={{width: '33.33%', textAlign: 'center'}}>
+                            <div className="lbl-title" style={{fontSize: '11px'}}>PAQUETE<br/>ACTUAL</div>
+                            <div className="lbl-big" style={{fontSize: '48px'}}>{currentPackageDisplay}</div>
+                        </div>
+                        <div className="lbl-col" style={{width: '33.33%', backgroundColor: '#e0e0e0', textAlign: 'center'}}>
+                            <div className="lbl-title" style={{fontSize: '11px'}}>PIEZAS EN<br/>PAQUETE</div>
+                            <div className="lbl-big" style={{fontSize: '48px'}}>{piecesInPackage}</div>
+                        </div>
+                        <div className="lbl-col" style={{width: '33.33%', textAlign: 'center'}}>
+                            <div className="lbl-title">MAQUINA</div>
+                            <div className="lbl-big" style={{fontSize: '48px'}}>{order.maquina || '0'}</div>
+                        </div>
+                    </div>
+
+                    {/* FILA 5: MATERIALES Y DETALLES */}
+                    <div className="lbl-row row-details">
+                        <div style={{width: '50%', display: 'flex', flexDirection: 'column', borderRight: '2px solid black'}}>
+                            <div style={{flex: 1, display: 'flex', alignItems: 'center', borderBottom: '1px solid black', padding: '0 5px'}}>
+                                <span className="lbl-title" style={{width: '50px'}}>NYLON</span>
+                                <span className="lbl-small truncate" style={{fontSize: '14px'}} title={nylonText}>{nylonText.substring(0, 18)}</span>
+                            </div>
+                            <div style={{flex: 1, display: 'flex', alignItems: 'center', padding: '0 5px'}}>
+                                <span className="lbl-title" style={{width: '50px'}}>LYCRA</span>
+                                <span className="lbl-small truncate" style={{fontSize: '14px'}} title={lycraText}>{lycraText.substring(0, 18)}</span>
+                            </div>
+                        </div>
+                        <div style={{width: '50%', display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr'}}>
+                            <div className="lbl-col" style={{borderBottom: '1px solid black', borderRight: '1px solid black', padding: '2px'}}>
+                                <div className="lbl-title">TALLA</div>
+                                <div className="lbl-medium" style={{fontSize: '20px'}}>{subPiece.talla || 'UNI'}</div>
+                            </div>
+                            <div className="lbl-col" style={{borderBottom: '1px solid black', padding: '2px'}}>
+                                <div className="lbl-title">PESO (g)</div>
+                                <div className="lbl-small">{subPiece.peso || '---'}</div>
+                            </div>
+                            <div className="lbl-col" style={{gridColumn: 'span 2', padding: '2px', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
+                                <div className="lbl-title">TIEMPO (min)</div>
+                                <div className="lbl-small" style={{fontSize: '20px', marginRight: '10px'}}>{subPiece.tiempo || '---'}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* FILA 6: FOOTER (FECHA Y BARCODE) */}
+                    <div className="lbl-row row-footer" style={{padding: '0 10px', alignItems: 'center', justifyContent: 'space-between'}}>
+                        <div style={{display: 'flex', flexDirection: 'column'}}>
+                            <div className="lbl-title">FECHA DE ENTREGA</div>
+                            <div className="lbl-medium" style={{fontSize: '20px'}}>{fechaEntrega}</div>
+                        </div>
+                        <div style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexGrow: 1}}>
+                            <svg ref={svgRef}></svg>
+                            <div style={{fontSize: '10px', marginTop: '-5px'}}>{barcodeValue}</div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- COMPONENTE RASTREADOR DE ESCANEO ---
+        const ScanTracker = ({ orderId, packageLabels, onScan }) => {
+            const [scannedData, setScannedData] = useState([]);
+            const [scanInput, setScanInput] = useState('');
+            const [scanStatus, setScanStatus] = useState({ message: 'Esperando escaneo...', type: 'info' });
+            const inputRef = useRef(null);
+
+            // Obtener el estado actual de los escaneos para la orden
+            useEffect(() => {
+                if (!orderId) {
+                    setScannedData([]);
                     return;
                 }
-                errorMsg.classList.add('hidden');
+                
+                // Suscripción en tiempo real a los documentos de la orden actual
+                const unsubscribe = db.collection('scanned_labels')
+                    .where('orderId', '==', String(orderId))
+                    .onSnapshot(snapshot => {
+                        const data = snapshot.docs.map(doc => doc.data());
+                        setScannedData(data);
+                    }, error => {
+                        console.error("Error al obtener escaneos:", error);
+                    });
 
-                // ANIMACIÓN DE ESCANEO
-                mainArea.classList.add('scan-effect');
-                setTimeout(() => mainArea.classList.remove('scan-effect'), 500);
-
-                // Procesar
-                handleScan(code);
-                this.value = ""; // Limpiar input inmediatamente
-            }
-        });
-
-        function handleScan(code) {
-            // 1. Parsear el código de barras
-            const barcodeDetails = parseBarcode(code);
-            if (!barcodeDetails) {
-                alert("Error de formato: El código escaneado no es compatible o no es válido.");
-                barcodeInput.focus();
-                return;
-            }
+                return () => unsubscribe();
+            }, [orderId]);
             
-            // 2. Mostrar estado de carga mientras se busca en DB
-            // Pre-llenar datos fijos en el modal
-            modalWeaver.textContent = weaverInput.value;
-            modalBarcodeValue.textContent = code;
-            document.getElementById('modalDate').textContent = new Date().toLocaleString('es-MX');
-            
-            // Mostrar modal con loading
-            openModal();
-            btnConfirm.classList.add('hidden');
-            btnCancel.classList.add('hidden');
-            btnLoading.classList.remove('hidden');
-            
-            // 3. Consultar Firebase usando el Order ID
-            const orderId = barcodeDetails.orderId;
-
-            db.collection('orders').doc(orderId).get()
-            .then(doc => {
-                if (doc.exists) {
-                    const orderData = doc.data();
-                    
-                    // Almacenar todos los datos combinados para guardar
-                    currentOrderData = {
-                        ...orderData,
-                        ...barcodeDetails // Incluye fullCode, paqueteActual, etc.
-                    };
-
-                    updateModalWithOrderData(orderData, barcodeDetails);
-                    
-                    // Mostrar botones de confirmación
-                    resetModalButtons();
-                } else {
-                    alert("Error: Orden con ID " + orderId + " no encontrada en la base de datos.");
-                    closeModal();
+            // Enfocar el input cada vez que se selecciona una nueva orden
+            useEffect(() => {
+                if (inputRef.current) {
+                    inputRef.current.focus();
                 }
-            })
-            .catch(error => {
-                console.error("Error al buscar la orden:", error);
-                alert("Error al conectar con la base de datos. Intenta de nuevo.");
-                closeModal();
-            });
-        }
+            }, [orderId]);
 
-        // 6. CONTROL DEL MODAL
-        function openModal() {
-            modalOverlay.classList.remove('hidden');
-            setTimeout(() => {
-                modalOverlay.classList.remove('opacity-0');
-                modalContent.classList.remove('scale-95');
-                modalContent.classList.add('scale-100');
-            }, 10);
-            barcodeInput.blur(); 
-        }
+            // Clasificar etiquetas en Escaneadas y Pendientes
+            const { scannedPackages, pendingPackages } = useMemo(() => {
+                const scannedCodes = new Set(scannedData.map(d => d.id));
+                const packages = packageLabels.map(label => ({
+                    ...label,
+                    isScanned: scannedCodes.has(label.packageCode),
+                    scanTime: scannedData.find(d => d.id === label.packageCode)?.scanDate?.toDate().toLocaleTimeString('es-MX') || null,
+                }));
+                
+                return {
+                    scannedPackages: packages.filter(p => p.isScanned),
+                    pendingPackages: packages.filter(p => !p.isScanned)
+                };
+            }, [packageLabels, scannedData]);
 
-        function closeModal() {
-            modalOverlay.classList.add('opacity-0');
-            modalContent.classList.remove('scale-100');
-            modalContent.classList.add('scale-95');
+
+            // Manejar la acción de escaneo (ENTER)
+            const handleScanSubmit = async (e) => {
+                e.preventDefault();
+                const code = scanInput.trim();
+                setScanInput(''); // Limpiar inmediatamente el input
+                if (!code || !orderId) {
+                    setScanStatus({ message: 'Código inválido o no hay orden seleccionada.', type: 'error' });
+                    return;
+                }
+
+                const targetPackage = packageLabels.find(p => p.packageCode === code);
+
+                if (!targetPackage) {
+                    setScanStatus({ message: `Error: El código ${code} no pertenece a esta orden.`, type: 'error' });
+                    return;
+                }
+                
+                // 1. Revisar si ya fue escaneado
+                const isAlreadyScanned = scannedPackages.some(p => p.packageCode === code);
+
+                if (isAlreadyScanned) {
+                    setScanStatus({ message: `Advertencia: Paquete ${targetPackage.displayPackageId} ya fue escaneado.`, type: 'warning' });
+                    return;
+                }
+
+                // 2. Registrar escaneo
+                try {
+                    const docRef = db.collection('scanned_labels').doc(code);
+                    await docRef.set({
+                        id: code,
+                        orderId: String(orderId),
+                        packageIndex: targetPackage.packageIndex,
+                        piecesInPackage: targetPackage.piecesInPackage,
+                        scanDate: FieldValue.serverTimestamp(),
+                        scanLocation: 'Producción' // O donde sea que se esté usando el escáner
+                    }, { merge: true });
+
+                    setScanStatus({ message: `Éxito: Paquete ${targetPackage.displayPackageId} escaneado.`, type: 'success' });
+                    onScan(); // Notificar al componente padre
+                } catch (error) {
+                    setScanStatus({ message: `Error al registrar escaneo: ${error.message}`, type: 'error' });
+                }
+            };
             
-            setTimeout(() => {
-                modalOverlay.classList.add('hidden');
-                resetModalButtons();
-                barcodeInput.focus(); 
-                currentOrderData = null; // Limpiar datos de la orden
-            }, 200);
-        }
-
-        function resetModalButtons() {
-            btnConfirm.classList.remove('hidden');
-            btnCancel.classList.remove('hidden');
-            btnLoading.classList.add('hidden');
-        }
-
-        // 7. GUARDAR EN FIREBASE (MODIFICADA)
-        function saveToFirebase() {
-            // UI Loading
-            btnConfirm.classList.add('hidden');
-            btnCancel.classList.add('hidden');
-            btnLoading.classList.remove('hidden');
-
-            if (!currentOrderData) {
-                alert("Error interno: Datos de la orden faltantes.");
-                closeModal();
-                return;
-            }
-            
-            // Usar currentOrderData (que contiene los datos de la DB + los datos del código de barras)
-            const record = {
-                // Datos del escaneo
-                codigo_paquete: currentOrderData.fullCode,
-                tejedor: weaverInput.value,
-                fecha_scan: firebase.firestore.FieldValue.serverTimestamp(),
-                fecha_legible: new Date().toLocaleString('es-MX'),
-                tipo: 'produccion',
-                
-                // Datos de la orden (extraídos)
-                order_id: currentOrderData.orderId,
-                partida: currentOrderData.partida || 'N/A',
-                codigo_modelo: currentOrderData.codigo || 'N/A',
-                cliente: currentOrderData.cliente || 'N/A',
-                maquina: currentOrderData.maquina || 'N/A',
-                
-                // Datos del paquete (extraídos del código)
-                paquete_actual: currentOrderData.paqueteActual, 
-                paquetes_totales: currentOrderData.paquetesTotales,
-                
-                // Podrías agregar más campos importantes de la orden original aquí si son necesarios
+            // Colores del estado de escaneo
+            const statusClasses = {
+                info: 'bg-blue-100 text-blue-800',
+                success: 'bg-green-100 text-green-800',
+                warning: 'bg-yellow-100 text-yellow-800',
+                error: 'bg-red-100 text-red-800',
             };
 
-            db.collection('registro_produccion').add(record)
-            .then(() => {
-                addToHistory(currentOrderData.fullCode, weaverInput.value);
-                closeModal();
-                if(navigator.vibrate) navigator.vibrate([100, 50, 100]);
-            })
-            .catch((error) => {
-                console.error("Error:", error);
-                alert("Error al guardar: " + error.message);
-                closeModal();
-            });
-        }
+            return (
+                <div className="w-80 bg-white border-l border-slate-200 flex flex-col no-print">
+                    <div className="p-4 border-b bg-slate-50">
+                        <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800"><Icon name="scan"/> Control de Escaneo</h3>
+                        <form onSubmit={handleScanSubmit} className="mt-3">
+                            <input 
+                                ref={inputRef}
+                                type="text" 
+                                value={scanInput}
+                                onChange={e => setScanInput(e.target.value)}
+                                placeholder="Escanea aquí el código de paquete"
+                                className="w-full border-2 border-slate-300 rounded p-2 text-sm focus:border-blue-500 focus:outline-none font-mono"
+                                autoFocus
+                            />
+                        </form>
+                        <div className={`mt-2 p-1.5 rounded text-xs text-center ${statusClasses[scanStatus.type]}`}>{scanStatus.message}</div>
+                    </div>
 
-        // 8. GESTIÓN DEL HISTORIAL VISUAL
-        function addToHistory(code, weaver) {
-            sessionScans++;
-            scanCount.textContent = sessionScans;
+                    <div className="flex-grow overflow-y-auto p-3 space-y-4">
+                        
+                        {/* PENDIENTES */}
+                        <div className="bg-red-50 p-3 rounded">
+                            <h4 className="font-bold text-red-800 flex items-center gap-1 mb-2"><Icon name="clock" size={14}/> PENDIENTES ({pendingPackages.length})</h4>
+                            <div className="grid grid-cols-3 gap-2">
+                                {pendingPackages.map(p => (
+                                    <div key={p.packageCode} className="p-1 text-center bg-white border border-red-300 rounded text-xs font-mono">
+                                        {p.displayPackageId}
+                                    </div>
+                                ))}
+                                {pendingPackages.length === 0 && <p className="text-xs text-red-600 col-span-3 italic">¡Todos los paquetes han sido escaneados!</p>}
+                            </div>
+                        </div>
 
-            if(sessionScans === 1) historyList.innerHTML = '';
+                        {/* ESCANEADOS */}
+                        <div className="bg-green-50 p-3 rounded">
+                            <h4 className="font-bold text-green-800 flex items-center gap-1 mb-2"><Icon name="check-circle" size={14}/> ESCANEADOS ({scannedPackages.length})</h4>
+                            <div className="grid grid-cols-3 gap-2">
+                                {scannedPackages.map(p => (
+                                    <div key={p.packageCode} className="p-1 text-center bg-white border border-green-300 rounded text-xs font-mono relative group">
+                                        {p.displayPackageId}
+                                        {p.scanTime && (
+                                            <span className="absolute top-0 right-0 -mt-2 -mr-2 bg-green-500 text-white text-[8px] px-1 py-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                                                {p.scanTime}
+                                            </span>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
 
-            const time = new Date().toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'});
-            
-            const item = document.createElement('div');
-            item.className = "bg-slate-700/50 p-3 rounded border-l-4 border-green-500 animate-[pulse_0.5s_ease-in-out]";
-            item.innerHTML = `
-                <div class="flex justify-between items-center mb-1">
-                    <span class="text-white font-bold text-sm truncate w-2/3" title="${code}">${code}</span>
-                    <span class="text-xs text-slate-400 font-mono">${time}</span>
+                    </div>
                 </div>
-                <div class="flex items-center gap-1 text-xs text-slate-400">
-                    <i data-lucide="check-circle" class="w-3 h-3 text-green-500"></i>
-                    <span>Registrado</span>
-                </div>
-            `;
+            );
+        };
 
-            historyList.insertBefore(item, historyList.firstChild);
+        // --- APP PRINCIPAL ---
+        const App = () => {
+            const [orders, setOrders] = useState([]);
+            const [selectedOrder, setSelectedOrder] = useState(null);
+            const [packageLabels, setPackageLabels] = useState([]); 
+            const [loading, setLoading] = useState(true);
+            const [filterText, setFilterText] = useState('');
+            const [scanTrackerKey, setScanTrackerKey] = useState(0); // Clave para forzar re-renderizado
+
+            const generatePackageLabels = (order) => {
+                const totalPieces = order.totalPedido || 0;
+                const packageSizeValue = order.packageSize === 'VARIO' || !order.packageSize ? 50 : (Number(order.packageSize) || 50); 
+                const N = totalPieces > 0 ? Math.ceil(totalPieces / packageSizeValue) : 1; 
+
+                const labels = [];
+                for (let i = 1; i <= N; i++) {
+                    const piecesInThisPackage = i < N ? packageSizeValue : (totalPieces % packageSizeValue || packageSizeValue);
+                    
+                    // Código de Barcode: ID_ORDEN-PARTIDA-CODIGO-PAQUETE_TOTAL|INDICE_ARRAY
+                    const arrayIndex = i - 1;
+                    const packageCode = `${order.id}-${order.partida}-${order.codigo}-${i}_${N}|${arrayIndex}`;
+
+                    labels.push({
+                        ...order,
+                        packageIndex: i, 
+                        totalPackages: N, 
+                        piecesInPackage: piecesInThisPackage,
+                        packageCode: packageCode, // Usado como ID de documento en Firestore
+                        displayPackageId: `${i}/${N}`, 
+                    });
+                }
+                return labels;
+            };
+
+            // Recargar escaneos después de un escaneo exitoso
+            const handleSuccessfulScan = useCallback(() => {
+                setScanTrackerKey(prev => prev + 1); 
+            }, []);
+
+            // Cargar órdenes activas
+            useEffect(() => {
+                const unsubscribe = db.collection('orders')
+                    .where('status', '!=', 'ARCHIVADO')
+                    .onSnapshot(snapshot => {
+                        const fetchedOrders = snapshot.docs.map(doc => doc.data());
+                        fetchedOrders.sort((a, b) => b.id - a.id);
+                        setOrders(fetchedOrders);
+                        setLoading(false);
+                    }, error => {
+                        console.error("Error fetching orders:", error);
+                        setLoading(false);
+                    });
+                
+                return () => unsubscribe();
+            }, []);
             
-            lucide.createIcons();
-        }
+            // Generar papeletas y resetear el tracker al seleccionar una orden
+            useEffect(() => {
+                if (selectedOrder) {
+                    setPackageLabels(generatePackageLabels(selectedOrder));
+                    setScanTrackerKey(0); // Resetear el tracker al cambiar de orden
+                } else {
+                    setPackageLabels([]);
+                }
+            }, [selectedOrder]);
 
+            const filteredOrders = useMemo(() => {
+                if (!filterText) return orders;
+                const txt = filterText.toUpperCase();
+                return orders.filter(o => 
+                    (o.codigo && o.codigo.includes(txt)) || 
+                    (o.cliente && o.cliente.includes(txt)) ||
+                    (o.partida && o.partida.includes(txt))
+                );
+            }, [orders, filterText]);
+
+            const handlePrint = () => {
+                if(packageLabels.length === 0) return;
+                window.print();
+            };
+
+            const handleArchive = async () => {
+                if(!selectedOrder) return;
+                
+                if(window.confirm(`¿Estás seguro de que ya imprimiste todas las ${packageLabels.length} papeletas para ${selectedOrder.codigo}?\n\nLa orden se marcará como ARCHIVADA y desaparecerá de esta lista.`)) {
+                    try {
+                        await db.collection('orders').doc(String(selectedOrder.id)).update({
+                            status: 'ARCHIVADO',
+                            printDate: new Date().toISOString()
+                        });
+                        setSelectedOrder(null);
+                        window.alert("Orden archivada correctamente.");
+                    } catch (error) {
+                        window.alert("Error al archivar: " + error.message);
+                    }
+                }
+            };
+
+            return (
+                <div className="flex h-screen w-full">
+                    
+                    {/* COLUMNA 1: BARRA LATERAL (GENERADOR) */}
+                    <div className="w-96 bg-slate-800 text-white flex flex-col border-r border-slate-700 shadow-xl no-print z-10">
+                        {/* Contenido de la barra lateral (Header, Input de búsqueda, Lista de órdenes) */}
+                        <div className="p-4 border-b border-slate-700 bg-slate-900">
+                            <h1 className="text-xl font-bold flex items-center gap-2 text-yellow-400">
+                                <Icon name="printer" /> GENERADOR PAPELETAS
+                            </h1>
+                            <p className="text-xs text-slate-400 mt-1">Selecciona una orden.</p>
+                            
+                            <div className="mt-4 relative">
+                                <input 
+                                    type="text" 
+                                    placeholder="Buscar modelo, cliente..." 
+                                    value={filterText}
+                                    onChange={e => setFilterText(e.target.value)}
+                                    className="w-full bg-slate-800 border border-slate-600 rounded p-2 pl-8 text-sm focus:border-yellow-400 focus:outline-none"
+                                />
+                                <Icon name="search" size={14} className="absolute left-3 top-3 text-slate-500" />
+                            </div>
+                        </div>
+
+                        <div className="flex-grow overflow-y-auto p-2 space-y-2">
+                            {loading && <div className="flex justify-center p-10"><div className="loader"></div></div>}
+                            
+                            {!loading && filteredOrders.length === 0 && (
+                                <div className="text-center text-slate-500 p-8 text-sm">
+                                    No hay órdenes activas encontradas.
+                                </div>
+                            )}
+
+                            {filteredOrders.map(order => (
+                                <div 
+                                    key={order.id}
+                                    onClick={() => setSelectedOrder(order)}
+                                    className={`p-3 rounded cursor-pointer border-l-4 transition-all hover:bg-slate-700 ${selectedOrder?.id === order.id ? 'bg-slate-700 border-yellow-400 shadow-md' : 'bg-slate-800/50 border-transparent hover:border-slate-500'}`}
+                                >
+                                    <div className="flex justify-between items-start mb-1">
+                                        <span className="font-bold text-lg">{order.codigo}</span>
+                                        <span className="bg-slate-900 text-xs px-2 py-0.5 rounded text-slate-300 font-mono">MQ-{order.maquina}</span>
+                                    </div>
+                                    <div className="text-sm text-slate-300 truncate">{order.cliente}</div>
+                                    <div className="flex justify-between items-end mt-2">
+                                        <span className="text-xs bg-yellow-900/30 text-yellow-200 px-1 rounded">{order.partida}</span>
+                                        <span className="text-xs font-bold">{order.totalPedido} pzs</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        
+                        <div className="p-4 text-xs text-center text-slate-500 border-t border-slate-700 bg-slate-900">
+                            Sistema Textil Cloud v2.1
+                        </div>
+                    </div>
+
+                    {/* COLUMNA 2: ÁREA PRINCIPAL (PREVISUALIZACIÓN / IMPRESIÓN) */}
+                    <div className="flex-grow flex-shrink min-w-0 bg-slate-100 flex flex-col relative overflow-auto">
+                        
+                        {/* HEADER DE ACCIONES (SOLO PANTALLA) */}
+                        <div className="bg-white p-4 shadow-sm border-b flex justify-between items-center no-print sticky top-0 z-10">
+                            <div>
+                                {selectedOrder ? (
+                                    <h2 className="font-bold text-slate-700 flex items-center gap-2">
+                                        VISTA PREVIA: <span className="text-black">{selectedOrder.codigo}</span>
+                                        <span className="text-sm font-medium text-blue-600 bg-blue-100 px-2 py-1 rounded-full">{packageLabels.length} Papeletas generadas</span>
+                                    </h2>
+                                ) : (
+                                    <h2 className="font-bold text-slate-400">Ninguna orden seleccionada</h2>
+                                )}
+                            </div>
+                            <div className="flex gap-3">
+                                {selectedOrder && (
+                                    <>
+                                        <button 
+                                            onClick={handleArchive} 
+                                            className="px-4 py-2 bg-white border border-slate-300 text-slate-600 rounded font-bold hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition flex items-center gap-2 text-sm"
+                                            title="Mover a historial"
+                                        >
+                                            <Icon name="archive" size={16}/> ARCHIVAR ORDEN
+                                        </button>
+                                        <button 
+                                            onClick={handlePrint} 
+                                            className="px-6 py-2 bg-slate-900 text-white rounded font-bold hover:bg-slate-700 shadow-lg transition flex items-center gap-2"
+                                        >
+                                            <Icon name="printer" size={18}/> IMPRIMIR ({packageLabels.length})
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* CONTENEDOR CENTRAL DE PAPELETAS (SCROLLABLE) */}
+                        <div className="flex-grow flex flex-col items-center p-10 bg-slate-200 overflow-y-auto print-container">
+                            {packageLabels.length > 0 ? (
+                                packageLabels.map((labelData, index) => (
+                                    <div key={index} className="label-wrapper mb-8 p-4 bg-white rounded shadow-xl hover:shadow-2xl transition-shadow">
+                                        <ProductionLabel labelData={labelData} />
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="text-center text-slate-400 flex flex-col items-center mt-20">
+                                    <Icon name="arrow-left-circle" size={48} className="mb-4 opacity-50"/>
+                                    <p className="text-lg font-bold">Selecciona una orden del menú izquierdo</p>
+                                    <p className="text-sm">Para generar y visualizar sus papeletas.</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* COLUMNA 3: LECTOR / TRACKER */}
+                    {selectedOrder && (
+                        <ScanTracker 
+                            key={selectedOrder.id + '-' + scanTrackerKey} // Cambiar key para forzar re-renderizado/re-suscripción
+                            orderId={selectedOrder.id}
+                            packageLabels={packageLabels}
+                            onScan={handleSuccessfulScan}
+                        />
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
     </script>
 </body>
 </html>
