@@ -167,8 +167,8 @@
             
             const currentPackageDisplay = order.displayPackageId || '1/1';
             const piecesInPackage = order.piecesInPackage || (order.packageSize === 'VARIO' ? 'VAR' : (order.packageSize || 50));
-            // Contenido del código de barras (ahora más corto)
-            const barcodeValue = order.packageCode || `${order.partida}-${order.codigo}`;
+            // Contenido del código de barras (ahora con el separador |)
+            const barcodeValue = order.packageCode || `${order.partida}|${order.codigo}`;
 
             useEffect(() => {
                 if (svgRef.current && barcodeValue) {
@@ -463,9 +463,9 @@
                 for (let i = 1; i <= N; i++) {
                     const piecesInThisPackage = i < N ? packageSizeValue : (totalPieces % packageSizeValue || packageSizeValue);
                     
-                    // --- CAMBIO CLAVE AQUÍ ---
-                    // Nuevo Código de Barcode: ID_ORDEN-INDICE_PAQUETE-TOTAL_PAQUETES (Ej: 1765486167007-1-6)
-                    const packageCode = `${order.id}-${i}-${N}`;
+                    // --- CAMBIO CLAVE AQUÍ: Usando pipe (|) como separador ---
+                    // Nuevo Código de Barcode: ID_ORDEN|INDICE_PAQUETE|TOTAL_PAQUETES (Ej: 1765486167007|1|6)
+                    const packageCode = `${order.id}|${i}|${N}`;
 
                     labels.push({
                         ...order,
