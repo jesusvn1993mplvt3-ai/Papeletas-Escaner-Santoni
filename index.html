@@ -13,10 +13,8 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     
     <style>
-        body { background-color: #f8fafc; font-family: 'Segoe UI', sans-serif; }
+        body { background-color: #f8fafc; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         .timeline-line { position: absolute; top: 50%; left: 0; right: 0; height: 2px; background: #e2e8f0; z-index: 0; transform: translateY(-50%); }
-        .step-dot { position: relative; z-index: 10; transition: all 0.3s ease; }
-        /* Animación para incidencias activas */
         @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
         .pulse-error { animation: pulse-red 2s infinite; }
     </style>
@@ -25,7 +23,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+        const { useState, useEffect, useMemo, useRef } = React;
 
         const firebaseConfig = {
             apiKey: "AIzaSyBqHgV4vDat1-VmZfKbiPg7nuiX-ROcexw",
@@ -39,105 +37,65 @@
         const db = firebase.firestore();
 
         const Icon = ({ name, size = 16, className }) => {
-            const ref = React.useRef(null);
-            React.useEffect(() => {
+            const ref = useRef(null);
+            useEffect(() => {
                 if (ref.current) ref.current.innerHTML = lucide.icons[name]?.toSvg({ width: size, height: size, class: className });
-            }, [name, className]);
+            }, [name, className, size]);
             return <span ref={ref} className="flex items-center justify-center"></span>;
         };
 
-        // DEFINICIÓN DE LA RUTA DE PROCESOS
         const STEPS = [
             { id: 'TEJEDOR', label: 'TEJIDO', icon: 'scan-barcode' },
             { id: 'SUSAN', label: 'SUSAN', icon: 'clipboard-check' },
             { id: 'ALEX', label: 'ALEX', icon: 'droplets' },
-            { id: 'MAGO', label: 'CONFECCIÓN', icon: 'scissors' }, // Antes "Mago"
+            { id: 'MAGO', label: 'CONFECCIÓN', icon: 'scissors' },
             { id: 'EMPAQUE', label: 'TERM/EMP', icon: 'package' },
             { id: 'FINAL', label: 'FINAL', icon: 'check-circle-2' }
         ];
 
         const App = () => {
             const [orders, setOrders] = useState([]);
-            const [view, setView] = useState('PARTIDAS'); // PARTIDAS | ORDENES | DETALLE
+            const [view, setView] = useState('PARTIDAS');
             const [selectedPartida, setSelectedPartida] = useState(null);
             const [selectedOrder, setSelectedOrder] = useState(null);
-            const [historyModal, setHistoryModal] = useState(null); // Paquete seleccionado para ver historial
+            const [historyModal, setHistoryModal] = useState(null);
 
-            // Carga de datos en tiempo real
             useEffect(() => {
                 const unsubscribe = db.collection('orders').where('status', '!=', 'ARCHIVADO')
                     .onSnapshot(snap => {
-                        const data = snap.docs.map(d => ({ ...d.data(), id: d.id }));
-                        setOrders(data);
+                        setOrders(snap.docs.map(d => ({ ...d.data(), id: d.id })));
                     });
                 return () => unsubscribe();
             }, []);
 
-            // Agrupar por Partida
             const groupedPartidas = useMemo(() => {
                 const groups = {};
                 orders.forEach(o => {
-                    const key = o.partida || 'SIN PARTIDA';
+                    const key = o.partida || '';
+                    if (!key) return; 
                     if (!groups[key]) groups[key] = [];
                     groups[key].push(o);
                 });
                 return groups;
             }, [orders]);
 
-            const handleSelectPartida = (partida) => {
-                setSelectedPartida(partida);
-                setView('ORDENES');
-            };
-
-            const handleSelectOrder = (order) => {
-                setSelectedOrder(order);
-                setView('DETALLE');
-            };
-
-            const goBack = () => {
-                if (view === 'DETALLE') {
-                    setView('ORDENES');
-                    setSelectedOrder(null);
-                } else if (view === 'ORDENES') {
-                    setView('PARTIDAS');
-                    setSelectedPartida(null);
-                }
-            };
-
-            // Renderizado de un paso en la línea de tiempo
             const renderStep = (stepObj, pkg) => {
-                // Lógica para determinar el color del icono
                 const history = pkg.trackingHistory || [];
-                const stepLog = history.find(h => h.step === stepObj.id); // Buscar el log más reciente de este paso
+                const stepLog = history.find(h => h.step === stepObj.id);
                 
-                let statusColor = "bg-slate-200 text-slate-400 border-slate-300"; // Default (Gris)
+                let statusColor = "bg-slate-200 text-slate-400 border-slate-300";
                 let pulseClass = "";
 
                 if (stepLog) {
-                    if (stepLog.status === 'RED') {
-                        statusColor = "bg-red-100 text-red-600 border-red-500 font-bold";
-                        pulseClass = "pulse-error";
-                    } else if (stepLog.status === 'ORANGE') {
-                        statusColor = "bg-orange-100 text-orange-600 border-orange-500 font-bold";
-                    } else if (stepLog.status === 'GREEN') {
-                        statusColor = "bg-green-100 text-green-700 border-green-500";
-                    }
-                } else {
-                     // Si no hay log, pero el paquete ya pasó por un paso posterior (asumiendo flujo lineal)
-                     const currentStepIndex = STEPS.findIndex(s => s.id === pkg.currentStep);
-                     const thisStepIndex = STEPS.findIndex(s => s.id === stepObj.id);
-                     
-                     if (pkg.currentStep && currentStepIndex > thisStepIndex) {
-                         // Pasó por aquí implícitamente (o lógica antigua)
-                         statusColor = "bg-green-50 text-green-400 border-green-200"; 
-                     }
+                    if (stepLog.status === 'RED') { statusColor = "bg-red-100 text-red-600 border-red-500 font-bold"; pulseClass = "pulse-error"; }
+                    else if (stepLog.status === 'ORANGE') { statusColor = "bg-orange-100 text-orange-600 border-orange-500 font-bold"; }
+                    else if (stepLog.status === 'GREEN') { statusColor = "bg-green-100 text-green-700 border-green-500"; }
                 }
 
                 return (
                     <div key={stepObj.id} className="flex flex-col items-center relative flex-1">
                         <div 
-                            className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-[10px] cursor-pointer z-10 ${statusColor} ${pulseClass}`}
-                            title={stepLog ? `${stepLog.status} - ${new Date(stepLog.timestamp).toLocaleString()}` : 'Pendiente'}
+                            className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-[10px] cursor-pointer z-10 transition-all ${statusColor} ${pulseClass}`}
                             onClick={() => stepLog && setHistoryModal({ pkgCode: pkg.codigoUnico, logs: history })}
                         >
                             <Icon name={stepObj.icon} size={14}/>
@@ -149,132 +107,91 @@
 
             return (
                 <div className="flex h-screen overflow-hidden">
-                    
-                    {/* BARRA LATERAL (PARTIDAS) - Solo visible si no estamos en modo detalle completo (o podemos ocultarla) */}
                     {view !== 'DETALLE' && (
                         <div className="w-full md:w-80 bg-slate-900 text-white flex flex-col h-full shrink-0 shadow-xl z-20">
                             <div className="p-4 border-b border-slate-700 bg-slate-800">
                                 <h1 className="font-bold text-xl flex items-center gap-2"><Icon name="radar" className="text-cyan-400"/> RASTREO</h1>
-                                <p className="text-xs text-slate-400">Selecciona una Partida</p>
                             </div>
                             <div className="flex-grow overflow-y-auto p-2 space-y-2">
-                                {Object.keys(groupedPartidas).sort().map(partidaName => (
-                                    <div 
-                                        key={partidaName}
-                                        onClick={() => handleSelectPartida(partidaName)}
-                                        className={`p-4 rounded-lg cursor-pointer transition border-l-4 ${selectedPartida === partidaName ? 'bg-cyan-900 border-cyan-400' : 'bg-slate-800 border-transparent hover:bg-slate-700'}`}
-                                    >
-                                        <div className="font-bold text-lg">{partidaName}</div>
-                                        <div className="text-xs text-slate-400">{groupedPartidas[partidaName].length} Órdenes activas</div>
+                                {Object.keys(groupedPartidas).sort().map(pName => (
+                                    <div key={pName} onClick={() => { setSelectedPartida(pName); setView('ORDENES'); }}
+                                        className={`p-4 rounded-lg cursor-pointer transition border-l-4 ${selectedPartida === pName ? 'bg-cyan-900 border-cyan-400' : 'bg-slate-800 border-transparent hover:bg-slate-700'}`}>
+                                        <div className="font-bold text-lg">{pName}</div>
+                                        <div className="text-xs text-slate-400">{groupedPartidas[pName].length} Órdenes</div>
                                     </div>
                                 ))}
                             </div>
                         </div>
                     )}
 
-                    {/* ÁREA PRINCIPAL */}
                     <div className="flex-grow bg-slate-100 flex flex-col relative h-full overflow-hidden">
-                        
-                        {/* SELECCIÓN DE ÓRDENES (Capa Intermedia) */}
                         {view === 'ORDENES' && selectedPartida && (
-                            <div className="absolute inset-0 bg-white/95 z-30 flex flex-col animate-fade-in p-6">
-                                <button onClick={goBack} className="mb-4 text-slate-500 font-bold flex items-center gap-2 hover:text-slate-800"><Icon name="arrow-left"/> VOLVER A PARTIDAS</button>
+                            <div className="absolute inset-0 bg-white/95 z-30 flex flex-col p-6 animate-in fade-in duration-300">
+                                <button onClick={() => setView('PARTIDAS')} className="mb-4 text-slate-500 font-bold flex items-center gap-2"><Icon name="arrow-left"/> VOLVER</button>
                                 <h2 className="text-2xl font-black text-slate-800 mb-6 border-b pb-2">PARTIDA: <span className="text-cyan-600">{selectedPartida}</span></h2>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                     {groupedPartidas[selectedPartida].map(order => (
-                                        <div key={order.id} onClick={() => handleSelectOrder(order)} className="bg-white border hover:border-cyan-500 shadow-md p-5 rounded-xl cursor-pointer hover:shadow-lg transition group">
-                                            <div className="text-xs font-bold text-slate-400 mb-1">MODELO</div>
-                                            <div className="text-xl font-black text-slate-800 group-hover:text-cyan-600">{order.codigo}</div>
-                                            <div className="text-sm text-slate-600 mt-2">{order.cliente}</div>
-                                            <div className="mt-4 flex justify-between items-end">
-                                                <span className="bg-slate-100 px-2 py-1 rounded text-xs font-bold">{order.progreso?.length || 0} Paquetes</span>
-                                                <Icon name="chevron-right" className="text-slate-300 group-hover:text-cyan-500"/>
-                                            </div>
+                                        <div key={order.id} onClick={() => { setSelectedOrder(order); setView('DETALLE'); }} className="bg-white border hover:border-cyan-500 shadow-md p-5 rounded-xl cursor-pointer transition group">
+                                            <div className="text-xl font-black text-slate-800 group-hover:text-cyan-600">{order.codigo || ''}</div>
+                                            <div className="text-sm text-slate-600">{order.cliente || ''}</div>
                                         </div>
                                     ))}
                                 </div>
                             </div>
                         )}
 
-                        {/* VISTA DETALLE (RASTREO PURO) */}
                         {view === 'DETALLE' && selectedOrder && (
                             <div className="flex flex-col h-full bg-white">
-                                {/* HEADER FIJO */}
                                 <div className="bg-slate-900 text-white p-4 shadow-md shrink-0 flex justify-between items-center">
                                     <div className="flex items-center gap-4">
-                                        <button onClick={goBack} className="bg-slate-700 hover:bg-slate-600 p-2 rounded-full"><Icon name="arrow-left" size={20}/></button>
+                                        <button onClick={() => setView('ORDENES')} className="bg-slate-700 p-2 rounded-full"><Icon name="arrow-left" size={20}/></button>
                                         <div>
-                                            <div className="text-[10px] text-cyan-400 font-bold tracking-widest uppercase">PARTIDA {selectedOrder.partida}</div>
-                                            <div className="text-xl font-black leading-none">ORDEN {selectedOrder.codigo} <span className="text-sm font-normal opacity-70">({selectedOrder.cliente})</span></div>
+                                            {selectedOrder.partida && <div className="text-[10px] text-cyan-400 font-bold tracking-widest uppercase">PARTIDA {selectedOrder.partida}</div>}
+                                            <div className="text-xl font-black leading-none">
+                                                {selectedOrder.codigo || ''} 
+                                                <span className="text-sm font-normal opacity-70 ml-2">{selectedOrder.cliente ? `(${selectedOrder.cliente})` : ''}</span>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div className="text-right hidden md:block">
-                                        <div className="text-xs opacity-50">Total Paquetes</div>
-                                        <div className="font-bold text-xl">{selectedOrder.progreso?.length || 0}</div>
                                     </div>
                                 </div>
 
-                                {/* LISTA DE PAQUETES */}
-                                <div className="flex-grow overflow-y-auto p-2 md:p-6 bg-slate-50 space-y-3">
+                                <div className="flex-grow overflow-y-auto p-4 space-y-3">
                                     {selectedOrder.progreso?.map((pkg, idx) => (
-                                        <div key={idx} className="bg-white border border-slate-200 rounded-lg p-3 shadow-sm flex flex-col md:flex-row items-center gap-4">
-                                            {/* INFO PAQUETE */}
-                                            <div className="w-full md:w-48 shrink-0 flex justify-between md:block border-b md:border-b-0 md:border-r border-slate-100 pb-2 md:pb-0">
-                                                <div>
-                                                    <div className="text-xs font-bold text-slate-400">CÓDIGO ÚNICO</div>
-                                                    <div className="font-black text-slate-800 text-lg">{pkg.codigoUnico}</div>
-                                                </div>
-                                                <div className="md:mt-1 text-right md:text-left">
-                                                    <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-xs font-bold">{pkg.piezaNombre} ({pkg.cantidad})</span>
-                                                </div>
+                                        <div key={idx} className="bg-white border rounded-lg p-3 shadow-sm flex flex-col md:flex-row items-center gap-4">
+                                            <div className="w-full md:w-48 shrink-0 border-b md:border-b-0 md:border-r border-slate-100">
+                                                <div className="font-black text-slate-800">{pkg.codigoUnico || ''}</div>
+                                                <div className="text-[10px] text-slate-500 font-bold uppercase">{pkg.piezaNombre || ''}</div>
                                             </div>
-
-                                            {/* LINEA DE TIEMPO */}
-                                            <div className="flex-grow w-full relative pt-2 pb-1">
+                                            <div className="flex-grow w-full relative h-12 flex items-center">
                                                 <div className="timeline-line"></div>
-                                                <div className="flex justify-between items-center w-full">
-                                                    {STEPS.map(step => renderStep(step, pkg))}
-                                                </div>
+                                                <div className="flex justify-between items-center w-full">{STEPS.map(s => renderStep(s, pkg))}</div>
                                             </div>
                                         </div>
                                     ))}
                                 </div>
-                            </div>
-                        )}
-
-                        {/* MODAL HISTORIAL (NOTAS) */}
-                        {historyModal && (
-                            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setHistoryModal(null)}>
-                                <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden" onClick={e => e.stopPropagation()}>
-                                    <div className="bg-slate-800 text-white p-3 font-bold flex justify-between">
-                                        <span>Historial: {historyModal.pkgCode}</span>
-                                        <button onClick={() => setHistoryModal(null)}><Icon name="x"/></button>
-                                    </div>
-                                    <div className="p-4 max-h-96 overflow-y-auto space-y-3">
-                                        {historyModal.logs.map((log, i) => (
-                                            <div key={i} className={`border-l-4 pl-3 py-1 ${log.status === 'RED' ? 'border-red-500' : (log.status === 'ORANGE' ? 'border-orange-500' : 'border-green-500')}`}>
-                                                <div className="flex justify-between text-xs font-bold text-slate-500">
-                                                    <span>{log.step}</span>
-                                                    <span>{new Date(log.timestamp).toLocaleTimeString()}</span>
-                                                </div>
-                                                <div className="font-bold text-sm">{log.status === 'RED' ? '🔴 INCIDENCIA' : (log.status === 'ORANGE' ? '🟠 SOLUCIONADO' : '🟢 COMPLETADO')}</div>
-                                                {log.note && <div className="text-xs bg-slate-100 p-2 mt-1 rounded italic text-slate-700">"{log.note}"</div>}
-                                                <div className="text-[10px] text-slate-400 mt-1">Por: {log.user || 'Sistema'}</div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                        
-                        {/* ESTADO VACÍO INICIAL */}
-                        {view === 'PARTIDAS' && !selectedPartida && (
-                            <div className="flex flex-col items-center justify-center h-full text-slate-300">
-                                <Icon name="arrow-left-circle" size={64} className="mb-4"/>
-                                <p className="text-xl font-bold">Selecciona una Partida para comenzar</p>
                             </div>
                         )}
                     </div>
+
+                    {historyModal && (
+                        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setHistoryModal(null)}>
+                            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden" onClick={e => e.stopPropagation()}>
+                                <div className="bg-slate-800 text-white p-3 font-bold flex justify-between">
+                                    <span>Historial: {historyModal.pkgCode}</span>
+                                    <button onClick={() => setHistoryModal(null)}><Icon name="x"/></button>
+                                </div>
+                                <div className="p-4 space-y-3">
+                                    {historyModal.logs.map((log, i) => (
+                                        <div key={i} className={`border-l-4 pl-3 py-1 ${log.status === 'RED' ? 'border-red-500' : (log.status === 'ORANGE' ? 'border-orange-500' : 'border-green-500')}`}>
+                                            <div className="flex justify-between text-[10px] font-bold text-slate-400"><span>{log.step}</span><span>{new Date(log.timestamp).toLocaleTimeString()}</span></div>
+                                            <div className="font-bold text-sm">{log.status === 'RED' ? '🔴 INCIDENCIA' : (log.status === 'ORANGE' ? '🟠 SOLUCIONADO' : '🟢 OK')}</div>
+                                            {log.note && <div className="text-xs bg-slate-50 p-2 mt-1 rounded italic">"{log.note}"</div>}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         };
